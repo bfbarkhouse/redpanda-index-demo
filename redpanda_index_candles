@@ -1,0 +1,77 @@
+input:
+  label: "redpanda_index_candles_input"
+  kafka_franz:
+    seed_brokers: ["<Redpanda Kafka API URL>"]
+    topics: ["redpanda_index_prices"]
+    consumer_group: "redpanda_index_candles_cg"
+    tls:
+      enabled: true
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: ${secrets.REDPANDA_INDEX_RP_USER}
+        password: ${secrets.REDPANDA_INDEX_RP_PASS}
+  processors:
+  - label: "redpanda_index_candles_schema_decode"
+    schema_registry_decode:
+      url: "<Redpanda Schema Registry URL>"
+      basic_auth:
+        enabled: true
+        username: "${secrets.REDPANDA_INDEX_RP_USER}"
+        password: "${secrets.REDPANDA_INDEX_RP_PASS}"
+      avro:
+        raw_unions: true
+ 
+buffer:
+  system_window:
+    timestamp_mapping: root = this.t 
+    size: 10s
+
+pipeline:
+  processors:
+    - label: archive_window_as_array
+      archive:
+        format: json_array
+
+    - label: index_candle_reduce
+      jq:
+        query: |
+          ( sort_by(.symbol) | group_by(.symbol)
+            | map({
+              symbol: .[0].symbol,
+              min: (map(.p | tonumber? // .) | min? // 0),
+              max: (map(.p | tonumber? // .) | max? // 0)
+            })
+          ) as $per
+
+          | {
+              price_low:  ($per | map(.min) | add? // 0),
+              price_high: ($per | map(.max) | add? // 0),
+              _debug: {
+                symbol_count: ($per | length),
+                per_symbol:   $per
+              }
+            }
+
+          | .price_low  = ((.price_low  * 100) | round / 100)
+          | .price_high = ((.price_high * 100) | round / 100)
+
+    - label: index_candle_shape
+      mapping: |
+        root.name          = "Redpanda Index"
+        root.period_ending = @window_end_timestamp
+        root.price_low     = this.price_low
+        root.price_high    = this.price_high
+        root._debug        = this._debug
+
+output:
+  label: "redpanda_index_candles_output"
+  kafka_franz:
+    seed_brokers: ["<Redpanda Kafka API URL>"]
+    tls:
+      enabled: true
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: ${secrets.REDPANDA_INDEX_RP_USER} 
+        password: ${secrets.REDPANDA_INDEX_RP_PASS}
+    topic: redpanda_index_candles
+    key: ${! @window_end_timestamp }
