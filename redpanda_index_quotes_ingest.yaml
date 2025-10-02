@@ -1,0 +1,60 @@
+input:
+  label: "redpanda_index_quotes_input"
+  http_client:
+    url: "https://data.alpaca.markets/v2/stocks/trades/latest?symbols=spy"
+    verb: GET
+    headers: {
+      APCA-API-KEY-ID: "${secrets.ALPACA_API_KEY_ID}",
+      APCA-API-SECRET-KEY: "${secrets.ALPACA_API_SECRET_KEY}",
+      accept: application/json
+    }
+    tls:
+      enabled: true
+    timeout: 5s
+    stream:
+      enabled: true
+      reconnect: true
+      scanner:
+        lines: {}
+    auto_replay_nacks: true
+
+pipeline:
+  processors:
+    - label: "redpanda_index_quotes_map"
+      mapping: |
+          root = this.trades.map_each(item -> {
+            "symbol": item.key,
+            "data": item.value
+          }).values()
+    - label: "redpanda_index_quotes_unarchive"
+      unarchive:
+        format: "json_array"
+    - label: "redpanda_index_quotes_map2"
+      mapping: |
+        meta key = this.symbol
+        root = this.data.merge({ "symbol": this.symbol })
+    - label: "redpanda_index_quotes_drop_fields"
+      mapping: |
+        root = this.without("x","s","i","c","z")
+    - label: "redpanda_index_quotes_schema_encode"
+      schema_registry_encode:
+        subject: "redpanda_index_quotes-value"
+        url: "<Redpanda Schema Registry URL>"
+        basic_auth:
+          enabled: true
+          username: "${secrets.REDPANDA_INDEX_RP_USER}"
+          password: ${secrets.REDPANDA_INDEX_RP_PASS}
+        avro_raw_json: true
+
+output:
+  label: "redpanda_index_quotes_output"
+  kafka_franz:
+    seed_brokers: ["<Redpanda Kafka API URL"]
+    tls:
+      enabled: true
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: ${secrets.REDPANDA_INDEX_RP_USER}
+        password: ${secrets.REDPANDA_INDEX_RP_PASS}
+    topic: redpanda_index_prices
+    key: ${! meta("key") }
