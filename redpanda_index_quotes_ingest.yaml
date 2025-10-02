@@ -40,21 +40,21 @@ pipeline:
       schema_registry_encode:
         subject: "redpanda_index_quotes-value"
         url: "<Redpanda Schema Registry URL>"
-        basic_auth:
-          enabled: true
-          username: "${secrets.REDPANDA_INDEX_RP_USER}"
-          password: ${secrets.REDPANDA_INDEX_RP_PASS}
+        #basic_auth:
+          #enabled: true
+          #username: "${secrets.REDPANDA_INDEX_RP_USER}"
+          #password: ${secrets.REDPANDA_INDEX_RP_PASS}
         avro_raw_json: true
 
 output:
   label: "redpanda_index_quotes_output"
   kafka_franz:
     seed_brokers: ["<Redpanda Kafka API URL"]
-    tls:
-      enabled: true
-    sasl:
-      - mechanism: SCRAM-SHA-256
-        username: ${secrets.REDPANDA_INDEX_RP_USER}
-        password: ${secrets.REDPANDA_INDEX_RP_PASS}
+    #tls:
+      #enabled: true
+    #sasl:
+      #- mechanism: SCRAM-SHA-256
+        #username: ${secrets.REDPANDA_INDEX_RP_USER}
+        #password: ${secrets.REDPANDA_INDEX_RP_PASS}
     topic: redpanda_index_prices
     key: ${! meta("key") }
