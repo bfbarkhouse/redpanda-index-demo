@@ -4,12 +4,12 @@ input:
     seed_brokers: ["<Redpanda Kafka API URL>"]
     topics: ["redpanda_index_prices"]
     consumer_group: "redpanda_index_snowflake_cg"
-    tls:
-      enabled: true
-    sasl:
-      - mechanism: SCRAM-SHA-256
-        username: ${secrets.REDPANDA_INDEX_RP_USER}
-        password: ${secrets.REDPANDA_INDEX_RP_PASS}
+    #tls:
+      #enabled: true
+    #sasl:
+      #- mechanism: SCRAM-SHA-256
+        #username: ${secrets.REDPANDA_INDEX_RP_USER}
+        #password: ${secrets.REDPANDA_INDEX_RP_PASS}
     batching:
       period: 5s
 
@@ -18,10 +18,10 @@ pipeline:
     - label: "redpanda_index_snowflake_schema_decode"
       schema_registry_decode:
         url: "<Redpanda Schema Registry URL>"
-        basic_auth:
-          enabled: true
-          username: "${secrets.REDPANDA_INDEX_RP_USER}"
-          password: "${secrets.REDPANDA_INDEX_RP_PASS}"
+        #basic_auth:
+          #enabled: true
+          #username: "${secrets.REDPANDA_INDEX_RP_USER}"
+          #password: "${secrets.REDPANDA_INDEX_RP_PASS}"
         avro:
           raw_unions: true
     - label: "redpanda_index_snowflake_unarchive"
@@ -49,10 +49,10 @@ output:
         label: "redpanda_index_snowflake_dlq"
         kafka_franz:
           seed_brokers: ["<Redpanda Kafka API URL>"]
-          tls:
-            enabled: true
-          sasl:
-            - mechanism: SCRAM-SHA-256
-              username: ${secrets.REDPANDA_INDEX_RP_USER}
-              password: ${secrets.REDPANDA_INDEX_RP_PASS}
+          #tls:
+            #enabled: true
+          #sasl:
+            #- mechanism: SCRAM-SHA-256
+              #username: ${secrets.REDPANDA_INDEX_RP_USER}
+              #password: ${secrets.REDPANDA_INDEX_RP_PASS}
           topic: redpanda_index_snow_dlq
