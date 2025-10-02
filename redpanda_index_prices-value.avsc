@@ -1,0 +1,18 @@
+{
+    "type": "record",
+    "name": "trade",
+    "fields": [
+        {
+            "name": "t",
+            "type": "string"
+        },
+        {
+            "name": "p",
+            "type": "double"
+        },
+        {
+            "name": "symbol",
+            "type": "string"
+        }
+    ]
+}
