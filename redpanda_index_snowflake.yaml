@@ -1,0 +1,58 @@
+input:
+  label: "redpanda_index_snowflake_input"
+  kafka_franz:
+    seed_brokers: ["<Redpanda Kafka API URL>"]
+    topics: ["redpanda_index_prices"]
+    consumer_group: "redpanda_index_snowflake_cg"
+    tls:
+      enabled: true
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: ${secrets.REDPANDA_INDEX_RP_USER}
+        password: ${secrets.REDPANDA_INDEX_RP_PASS}
+    batching:
+      period: 5s
+
+pipeline:
+  processors:
+    - label: "redpanda_index_snowflake_schema_decode"
+      schema_registry_decode:
+        url: "<Redpanda Schema Registry URL>"
+        basic_auth:
+          enabled: true
+          username: "${secrets.REDPANDA_INDEX_RP_USER}"
+          password: "${secrets.REDPANDA_INDEX_RP_PASS}"
+        avro:
+          raw_unions: true
+    - label: "redpanda_index_snowflake_unarchive"
+      unarchive:
+        format: json_array
+
+output:
+  fallback:
+  - label: "redpanda_index_snowflake_output"
+    snowflake_streaming:
+      account: ${secrets.SNOWFLAKE_ACCT}
+      user: ${secrets.SNOWFLAKE_USER}
+      role: ${secrets.SNOWFLAKE_ROLE} 
+      database: ${secrets.SNOWFLAKE_DB}  
+      schema: ${secrets.SNOWFLAKE_SCHEMA}
+      table: redpanda_index_prices
+      private_key: "${secrets.SNOWFLAKE_KEY}" #You can ouput the expected format with awk '{printf "%s\\n", $0}' rsa_key.p8 or 
+      #private_key_file: "/path/on/disk" #Alternative to private_key when running self-managed Redpanda Connect
+      private_key_pass: "${secrets.SNOWFLAKE_KEY_PASS}"
+      channel_prefix: "${REDPANDA_PIPELINE_ID}-"
+      schema_evolution:
+        enabled: true
+  - retry:
+      output:
+        label: "redpanda_index_snowflake_dlq"
+        kafka_franz:
+          seed_brokers: ["<Redpanda Kafka API URL>"]
+          tls:
+            enabled: true
+          sasl:
+            - mechanism: SCRAM-SHA-256
+              username: ${secrets.REDPANDA_INDEX_RP_USER}
+              password: ${secrets.REDPANDA_INDEX_RP_PASS}
+          topic: redpanda_index_snow_dlq
