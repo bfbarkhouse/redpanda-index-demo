@@ -13,7 +13,7 @@ An end-to-end demo that streams SPY ETF quotes into Redpanda, streams them to Sn
 - `redpanda_index_quotes_ingest.yaml` — Job that ingests SPY trades into Redpanda from the Alpaca markets API. 
 - `redpanda_index_candles.yaml` — Job that samples price high and low in 10s windows from the data feed and writes to a new topic. 
 - `redpanda_index_snowflake.yaml` — Streams SPY trades to Snowflake for analytics. 
-- `redpanda_index_prices-value.avsc` - AVRO schema for the SPY trade data
+- `redpanda_index_prices-value.avsc` - AVRO schema for the SPY trade data.
 - `redpanda-index-demo-diagram.png` — Architecture diagram. 
 
 > **Note:** Update credentials, topic names, and any transforms to match your environment.
