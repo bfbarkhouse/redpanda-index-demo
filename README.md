@@ -20,7 +20,7 @@ An end-to-end demo that streams SPY ETF quotes into Redpanda, streams them to Sn
 
 ---
 
-## 🧱 Prerequisites
+## 🧱 Quickstart Prerequisites
 
 - Docker
 - `rpk` (Redpanda CLI)
