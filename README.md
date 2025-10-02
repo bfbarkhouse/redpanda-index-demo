@@ -1,1 +1,1 @@
-![Pipeline data flow](./images/logo.png)
+![Pipeline data flow](/redpanda-index-demo-diagram.png)
