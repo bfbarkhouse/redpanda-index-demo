@@ -4,20 +4,20 @@ input:
     seed_brokers: ["<Redpanda Kafka API URL>"]
     topics: ["redpanda_index_prices"]
     consumer_group: "redpanda_index_candles_cg"
-    tls:
-      enabled: true
-    sasl:
-      - mechanism: SCRAM-SHA-256
-        username: ${secrets.REDPANDA_INDEX_RP_USER}
-        password: ${secrets.REDPANDA_INDEX_RP_PASS}
+    #tls:
+      #enabled: true
+    #sasl:
+      #- mechanism: SCRAM-SHA-256
+        #username: ${secrets.REDPANDA_INDEX_RP_USER}
+        #password: ${secrets.REDPANDA_INDEX_RP_PASS}
   processors:
   - label: "redpanda_index_candles_schema_decode"
     schema_registry_decode:
       url: "<Redpanda Schema Registry URL>"
-      basic_auth:
-        enabled: true
-        username: "${secrets.REDPANDA_INDEX_RP_USER}"
-        password: "${secrets.REDPANDA_INDEX_RP_PASS}"
+      #basic_auth:
+        #enabled: true
+        #username: "${secrets.REDPANDA_INDEX_RP_USER}"
+        #password: "${secrets.REDPANDA_INDEX_RP_PASS}"
       avro:
         raw_unions: true
  
@@ -67,11 +67,11 @@ output:
   label: "redpanda_index_candles_output"
   kafka_franz:
     seed_brokers: ["<Redpanda Kafka API URL>"]
-    tls:
-      enabled: true
-    sasl:
-      - mechanism: SCRAM-SHA-256
-        username: ${secrets.REDPANDA_INDEX_RP_USER} 
-        password: ${secrets.REDPANDA_INDEX_RP_PASS}
+    #tls:
+      #enabled: true
+    #sasl:
+      #- mechanism: SCRAM-SHA-256
+        #username: ${secrets.REDPANDA_INDEX_RP_USER} 
+        #password: ${secrets.REDPANDA_INDEX_RP_PASS}
     topic: redpanda_index_candles
     key: ${! @window_end_timestamp }
