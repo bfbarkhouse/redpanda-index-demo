@@ -1,6 +1,6 @@
 # Redpanda Index Demo
 
-An end-to-end demo that streams SPY ETF quotes into Redpanda, streams them to Snowflake for analytics and derives windowed price movements for realtime volatility analysis. 
+An end-to-end demo that streams SPY ETF quotes into Redpanda, ingests them to Snowflake for analytics and derives windowed price movements for realtime volatility analysis. 
 
 <p align="center">
   <img src="./redpanda-index-demo-diagram.png" alt="Pipeline data flow" width="720">
@@ -10,13 +10,11 @@ An end-to-end demo that streams SPY ETF quotes into Redpanda, streams them to Sn
 
 ## ✨ What's in this repo
 
-- `redpanda_index_quotes_ingest.yaml` — Job that ingests SPY trades into Redpanda from the [Alpaca markets](https://alpaca.markets/) API. 
-- `redpanda_index_candles.yaml` — Job that samples price high and low in 10s windows from the data feed and writes to a new topic. 
+- `redpanda_index_quotes_ingest.yaml` — Job to ingests SPY trades into Redpanda from the [Alpaca](https://alpaca.markets/](https://docs.alpaca.markets/docs/about-market-data-api) Market Data API. 
+- `redpanda_index_candles.yaml` — Job to samples price high and low in continuous 10s windows from the data feed and write to a new topic. 
 - `redpanda_index_snowflake.yaml` — Streams SPY trades to Snowflake for analytics. 
 - `redpanda_index_prices-value.avsc` - AVRO schema for the SPY trade data.
 - `redpanda-index-demo-diagram.png` — Architecture diagram. 
-
-> **Note:** Update credentials, topic names, and any transforms to match your environment.
 
 ---
 
@@ -25,7 +23,7 @@ An end-to-end demo that streams SPY ETF quotes into Redpanda, streams them to Sn
 - Docker
 - `rpk` (Redpanda CLI) [Download](https://docs.redpanda.com/current/get-started/rpk-install/)
 - A Snowflake account + database/schema/warehouse
-- Credentials/secrets for any external data providers (Alpaca in this case)
+- Alpaca [API Key](https://docs.alpaca.markets/docs/about-market-data-api#authentication) - free plan allows 200 requests per minute.
 
 ---
 
