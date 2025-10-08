@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redpanda Index Volatility Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .mode-controls {
+            margin-bottom: 15px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+        }
+        .mode-toggle {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .mode-toggle label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: bold;
+            color: #495057;
+            cursor: pointer;
+        }
+        .mode-toggle input[type="radio"] {
+            margin: 0;
+        }
+        .timestamp-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        .timestamp-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .timestamp-group label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #495057;
+        }
+        .timestamp-group input {
+            padding: 5px 8px;
+            border: 1px solid #ced4da;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .data-info {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Redpanda Index Volatility Analysis</h1>
+        
+        <div id="status" class="status disconnected">
+            Disconnected from Redpanda
+        </div>
+        
+        <div class="mode-controls">
+            <div class="mode-toggle">
+                <label>
+                    <input type="radio" name="dataMode" value="realtime" id="realtimeMode" checked onchange="setRealtimeMode()">
+                    Real-time Mode
+                </label>
+                <label>
+                    <input type="radio" name="dataMode" value="historical" id="historicalMode" onchange="setHistoricalMode()">
+                    Historical Mode
+                </label>
+            </div>
+        </div>
+        
+        <div class="timestamp-controls" id="timestampControls" style="display: none;">
+            <div class="timestamp-group">
+                <label for="startTime">Start Time (UTC)</label>
+                <input type="datetime-local" id="startTime" step="1">
+            </div>
+            <div class="timestamp-group">
+                <label for="endTime">End Time (UTC)</label>
+                <input type="datetime-local" id="endTime" step="1">
+            </div>
+            <button onclick="setTimestampRange()">Set Range</button>
+            <button onclick="setLast24Hours()">Last 24h</button>
+            <button onclick="setLastHour()">Last 1h</button>
+        </div>
+        
+        <div class="controls">
+            <button id="connectBtn" onclick="toggleConnection()">Connect</button>
+            <button id="clearBtn" onclick="clearChart()">Clear Chart</button>
+            <span id="dataCount">Data points: 0</span>
+            <span id="timestampRange">Range: Real-time</span>
+        </div>
+        
+        <div class="data-info">
+            <strong>Index:</strong> SPY | <strong>Analysis:</strong> Price Range Volatility (10-second intervals)
+        </div>
+        
+        <div class="chart-container">
+            <canvas id="timeSeriesChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let chart;
+        let isConnected = false;
+        let dataPoints = [];
+        let timestampRange = null;
+        
+        // Initialize Chart.js with volatility range chart
+        console.log('📊 Frontend: Initializing Chart.js for volatility visualization');
+        const ctx = document.getElementById('timeSeriesChart').getContext('2d');
+        console.log('📊 Frontend: Got chart context:', ctx);
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [], // Category labels instead of time scale
+                datasets: [{
+                    label: 'Price Range (Volatility)',
+                    data: [],
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    barPercentage: 1.0,
+                    categoryPercentage: 1.0,
+                    maxBarThickness: undefined
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Period Ending (UTC)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Price Range (USD) - Volatility Measure'
+                        },
+                        ticks: {
+                            callback: function(value, index, values) {
+                                return '$' + value.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const range = context.parsed.y;
+                                return `Price Range: $${range.toFixed(2)}`;
+                            },
+                            afterLabel: function(context) {
+                                const dataPoint = dataPoints[context.dataIndex];
+                                if (dataPoint) {
+                                    const volatility = ((dataPoint.range / ((dataPoint.high + dataPoint.low) / 2)) * 100);
+                                    return [
+                                        `High: $${dataPoint.high.toFixed(2)}`,
+                                        `Low: $${dataPoint.low.toFixed(2)}`,
+                                        `Volatility: ${volatility.toFixed(2)}%`
+                                    ];
+                                }
+                                return [];
+                            },
+                            title: function(context) {
+                                const dataPoint = dataPoints[context[0].dataIndex];
+                                if (dataPoint && dataPoint.timestamp) {
+                                    return `Period Ending: ${dataPoint.timestamp.toLocaleString('en-US', {
+                                        timeZone: 'UTC',
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit'
+                                    })} UTC`;
+                                }
+                                return `Period Ending: ${context[0].label}`;
+                            }
+                        }
+                    }
+                },
+                animation: {
+                    duration: 0
+                }
+            }
+        });
+        console.log('📊 Frontend: Chart initialized successfully:', chart);
+
+        // Socket event listeners
+        socket.on('connect', () => {
+            console.log('🟢 Frontend: Connected to server');
+            console.log('🟢 Frontend: Socket ID:', socket.id);
+            updateStatus(true);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            updateStatus(false);
+        });
+
+        socket.on('index-data', (data) => {
+            console.log('📊 Frontend: Received Redpanda Index data:', data);
+            console.log('📊 Frontend: Data type check - name:', data.name, 'price_high:', data.price_high, 'price_low:', data.price_low);
+            addDataPoint(data);
+        });
+
+        socket.on('kafka-connected', (connected) => {
+            console.log('🟢 Frontend: Kafka connection status:', connected);
+            if (connected) {
+                console.log('🟢 Frontend: Kafka consumer connected successfully');
+                updateStatus(true);
+            } else {
+                console.log('🔴 Frontend: Kafka consumer disconnected');
+                updateStatus(false);
+            }
+        });
+
+        socket.on('kafka-error', (error) => {
+            console.error('🔴 Frontend: Kafka error:', error);
+            updateStatus(false);
+        });
+
+        function updateStatus(connected) {
+            isConnected = connected;
+            const statusElement = document.getElementById('status');
+            const connectBtn = document.getElementById('connectBtn');
+            
+            if (connected) {
+                statusElement.textContent = 'Connected to Redpanda';
+                statusElement.className = 'status connected';
+                connectBtn.textContent = 'Disconnect';
+            } else {
+                statusElement.textContent = 'Disconnected from Redpanda';
+                statusElement.className = 'status disconnected';
+                connectBtn.textContent = 'Connect';
+            }
+        }
+
+        function addDataPoint(data) {
+            console.log('📊 Frontend: addDataPoint called with:', data);
+
+            const timestamp = new Date(data.period_ending);
+            const high = parseFloat(data.price_high);
+            const low = parseFloat(data.price_low);
+            const range = high - low;
+
+            console.log('📊 Frontend: Calculated values - timestamp:', timestamp, 'high:', high, 'low:', low, 'range:', range);
+
+            // For volatility analysis, we show the price range (high - low)
+            const volatilityData = {
+                timestamp: timestamp,
+                range: range,
+                high: high,
+                low: low
+            };
+
+            console.log('📊 Frontend: Created volatility data point:', volatilityData);
+
+            dataPoints.push(volatilityData);
+            console.log('📊 Frontend: Total data points now:', dataPoints.length);
+
+            // Keep only last 100 data points for performance
+            if (dataPoints.length > 100) {
+                dataPoints.shift();
+                chart.data.labels.shift();
+                console.log('📊 Frontend: Trimmed data points to 100');
+            }
+
+            // Format timestamp as label for category axis
+            const timeLabel = timestamp.toLocaleTimeString('en-US', {
+                timeZone: 'UTC',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+
+            // Add label and data point to chart
+            chart.data.labels.push(timeLabel);
+            chart.data.datasets[0].data.push(range);
+
+            console.log('📊 Frontend: Added label:', timeLabel, 'range:', range);
+            chart.update('none');
+            console.log('📊 Frontend: Chart updated successfully');
+
+            // Update data count
+            document.getElementById('dataCount').textContent = `Data points: ${dataPoints.length}`;
+            console.log('📊 Frontend: Updated data count display');
+        }
+
+        function toggleConnection() {
+            console.log('🔄 Frontend: toggleConnection called, isConnected:', isConnected);
+            if (isConnected) {
+                console.log('🔄 Frontend: Disconnecting from Kafka...');
+                socket.emit('disconnect-kafka');
+            } else {
+                console.log('🔄 Frontend: Connecting to Kafka...');
+                const connectionConfig = {
+                    timestampRange: timestampRange
+                };
+                console.log('🔄 Frontend: Sending connect-kafka with config:', connectionConfig);
+                socket.emit('connect-kafka', connectionConfig);
+            }
+        }
+
+        function clearChart() {
+            dataPoints = [];
+            chart.data.labels = [];
+            chart.data.datasets[0].data = [];
+            chart.update();
+            document.getElementById('dataCount').textContent = 'Data points: 0';
+        }
+
+        function setTimestampRange() {
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            
+            if (!startTime || !endTime) {
+                alert('Please select both start and end times');
+                return;
+            }
+            
+            const start = new Date(startTime + 'Z'); // Add Z to treat as UTC
+            const end = new Date(endTime + 'Z');
+            
+            if (start >= end) {
+                alert('Start time must be before end time');
+                return;
+            }
+            
+            // Automatically switch to historical mode
+            document.getElementById('historicalMode').checked = true;
+            document.getElementById('timestampControls').style.display = 'flex';
+            
+            timestampRange = {
+                start: start.toISOString(),
+                end: end.toISOString()
+            };
+            
+            updateTimestampRangeDisplay();
+            clearChart();
+            
+            if (isConnected) {
+                socket.emit('disconnect-kafka');
+                setTimeout(() => {
+                    socket.emit('connect-kafka', { timestampRange: timestampRange });
+                }, 1000);
+            }
+        }
+
+        function setLast24Hours() {
+            const now = new Date();
+            const start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            
+            document.getElementById('startTime').value = formatDateTimeLocal(start);
+            document.getElementById('endTime').value = formatDateTimeLocal(now);
+            
+            setTimestampRange();
+        }
+
+        function setLastHour() {
+            const now = new Date();
+            const start = new Date(now.getTime() - 60 * 60 * 1000);
+            
+            document.getElementById('startTime').value = formatDateTimeLocal(start);
+            document.getElementById('endTime').value = formatDateTimeLocal(now);
+            
+            setTimestampRange();
+        }
+
+        function setRealtimeMode() {
+            timestampRange = null;
+            document.getElementById('startTime').value = '';
+            document.getElementById('endTime').value = '';
+            document.getElementById('timestampControls').style.display = 'none';
+            updateTimestampRangeDisplay();
+            clearChart();
+            
+            if (isConnected) {
+                socket.emit('disconnect-kafka');
+                setTimeout(() => {
+                    socket.emit('connect-kafka', { timestampRange: null });
+                }, 1000);
+            }
+        }
+
+        function setHistoricalMode() {
+            document.getElementById('timestampControls').style.display = 'flex';
+            // If there's already data in the timestamp fields, apply it
+            if (document.getElementById('startTime').value && document.getElementById('endTime').value) {
+                setTimestampRange();
+            }
+        }
+
+        function clearTimestampRange() {
+            timestampRange = null;
+            document.getElementById('startTime').value = '';
+            document.getElementById('endTime').value = '';
+            updateTimestampRangeDisplay();
+            clearChart();
+            
+            if (isConnected) {
+                socket.emit('disconnect-kafka');
+                setTimeout(() => {
+                    socket.emit('connect-kafka', { timestampRange: null });
+                }, 1000);
+            }
+        }
+        
+        // Initialize the timestamp range display on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateTimestampRangeDisplay();
+        });
+
+        function updateTimestampRangeDisplay() {
+            const rangeElement = document.getElementById('timestampRange');
+            if (timestampRange) {
+                const start = new Date(timestampRange.start);
+                const end = new Date(timestampRange.end);
+                rangeElement.textContent = `Range: ${start.toLocaleString()} - ${end.toLocaleString()}`;
+            } else {
+                rangeElement.textContent = 'Range: Real-time';
+            }
+        }
+
+        function formatDateTimeLocal(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            
+            return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+        }
+    </script>
+</body>
+</html>
