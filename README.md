@@ -35,7 +35,7 @@ An end-to-end demo that streams SPY ETF quotes into Redpanda, ingests them to Sn
 git clone https://github.com/bfbarkhouse/redpanda-index-demo && cd redpanda-index-demo
 ```
 ```bash
-rpk container start -n 3
+rpk container start -n 1
 rpk topic create redpanda_index_prices redpanda_index_snow_dlq redpanda_index_candles
 rpk registry schema create redpanda_index_prices-value --schema redpanda_index_prices-value.avsc
 rpk connect run ./redpanda_index_quotes_ingest.yaml
